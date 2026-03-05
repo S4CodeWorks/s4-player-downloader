@@ -23,7 +23,7 @@ export function Home() {
   const currentQualities = format === 'audio' ? audioQualities : videoQualities;
   const intervalRef = useRef(null);
 
-  // 🌍 DEFINIÇÃO DA URL DA API (Vercel ou Localhost)
+  // 🌍 URL da API: Tenta usar o Render (na nuvem) ou Localhost (no seu PC)
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   useEffect(() => {
@@ -31,15 +31,15 @@ export function Home() {
     else setQuality('1080p');
   }, [format]);
 
-  // Busca de informações do vídeo
+  // Busca de informações do vídeo (Preview)
   useEffect(() => {
     if (link.includes('youtube') || link.includes('youtu.be')) {
       setIsSearching(true);
       setPreviewData(null);
       const timer = setTimeout(async () => {
         try {
-          // 🛠️ USANDO A API DINÂMICA
-          const response = await axios.get(`${apiUrl}/api/info?url=${link}`);
+          // 🛡️ encodeURIComponent evita o erro 400 protegendo o link
+          const response = await axios.get(`${apiUrl}/api/info?url=${encodeURIComponent(link)}`);
           setPreviewData({
             title: response.data.title,
             artist: response.data.artist || 'Desconhecido',
@@ -47,7 +47,7 @@ export function Home() {
             duration: response.data.duration
           });
         } catch (error) {
-          console.error("Erro ao buscar info:", error);
+          console.error("Erro ao buscar informações do vídeo:", error);
         } finally {
           setIsSearching(false);
         }
@@ -61,7 +61,7 @@ export function Home() {
 
   const handleDownload = async () => {
     try {
-      // 🛠️ USANDO A API DINÂMICA PARA INICIAR DOWNLOAD
+      // Inicia o processo de download no servidor Render
       const res = await axios.post(`${apiUrl}/api/download/start`, {
         url: link, 
         format_type: format, 
@@ -71,6 +71,7 @@ export function Home() {
       setTaskId(res.data.task_id);
       setProgressData({ status: 'starting', percent: '0%' });
       
+      // Salva a tentativa no seu histórico do Firebase
       if (user && previewData) {
         await addDoc(collection(db, "downloads"), {
           userId: user.uid, 
@@ -85,21 +86,21 @@ export function Home() {
       }
     } catch (error) {
       console.error("Erro ao iniciar download:", error);
-      alert("Erro ao iniciar o download. Verifique se a API está rodando.");
+      alert("Não foi possível iniciar o download. Verifique sua conexão.");
     }
   };
 
+  // Monitora o progresso do download a cada segundo
   useEffect(() => {
     if (taskId) {
       intervalRef.current = setInterval(async () => {
         try {
-          // 🛠️ USANDO A API DINÂMICA PARA CHECAR PROGRESSO
           const res = await axios.get(`${apiUrl}/api/download/progress/${taskId}`);
           setProgressData(res.data);
           
           if (res.data.status === 'done') {
             clearInterval(intervalRef.current);
-            // 🛠️ REDIRECIONANDO PARA O ARQUIVO FINAL NA API
+            // Redireciona para o link final que entrega o arquivo pro usuário
             window.location.href = `${apiUrl}/api/download/file/${taskId}`;
             
             setTimeout(() => {
@@ -110,7 +111,7 @@ export function Home() {
             }, 3000);
           } else if (res.data.status === 'error') {
             clearInterval(intervalRef.current);
-            alert("Erro no servidor."); 
+            alert("Erro no servidor ao processar o vídeo."); 
             setTaskId(null);
           }
         } catch (error) {
@@ -124,7 +125,7 @@ export function Home() {
   return (
     <main className="flex-1 flex flex-col items-center justify-center px-4 w-full max-w-3xl mx-auto text-center pb-24 md:pb-32 pt-12 relative">
       
-      {/* Barra de Progresso */}
+      {/* Barra de Progresso Flutuante */}
       {progressData && (
         <div className="fixed md:top-8 bottom-20 md:bottom-auto left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 z-50 animate-in slide-in-from-bottom-4 md:slide-in-from-top-4 duration-300">
           <div className="flex items-center justify-between mb-2">
@@ -160,6 +161,7 @@ export function Home() {
         Cole o link abaixo. O sistema extrai áudio ou vídeo na melhor qualidade, trazendo capa e artista automaticamente.
       </p>
 
+      {/* Input de link e botão de ação */}
       <div className="w-full relative group flex flex-col md:block">
         <div className="absolute top-0 md:inset-y-0 left-6 flex items-center h-[60px] md:h-auto pointer-events-none">
           {isSearching ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> : <LinkIcon className="w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />}
@@ -184,6 +186,7 @@ export function Home() {
         </button>
       </div>
 
+      {/* Seleção de formato e qualidade */}
       <div className="flex flex-col items-center mt-8">
         <div className="flex items-center gap-4 md:gap-8 overflow-x-auto w-full justify-center pb-2">
           <button onClick={() => setFormat('audio')} className={`flex items-center gap-2 pb-2 border-b-2 transition-all whitespace-nowrap ${format === 'audio' ? 'border-slate-900 text-slate-900 font-medium' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
