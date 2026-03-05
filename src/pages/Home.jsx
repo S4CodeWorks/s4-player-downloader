@@ -23,18 +23,23 @@ export function Home() {
   const currentQualities = format === 'audio' ? audioQualities : videoQualities;
   const intervalRef = useRef(null);
 
+  // 🌍 DEFINIÇÃO DA URL DA API (Vercel ou Localhost)
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
   useEffect(() => {
     if (format === 'audio') setQuality('320kbps');
     else setQuality('1080p');
   }, [format]);
 
+  // Busca de informações do vídeo
   useEffect(() => {
     if (link.includes('youtube') || link.includes('youtu.be')) {
       setIsSearching(true);
       setPreviewData(null);
       const timer = setTimeout(async () => {
         try {
-          const response = await axios.get(`http://localhost:8000/api/info?url=${link}`);
+          // 🛠️ USANDO A API DINÂMICA
+          const response = await axios.get(`${apiUrl}/api/info?url=${link}`);
           setPreviewData({
             title: response.data.title,
             artist: response.data.artist || 'Desconhecido',
@@ -42,7 +47,7 @@ export function Home() {
             duration: response.data.duration
           });
         } catch (error) {
-          console.error("Erro", error);
+          console.error("Erro ao buscar info:", error);
         } finally {
           setIsSearching(false);
         }
@@ -52,25 +57,35 @@ export function Home() {
       setPreviewData(null);
       setIsSearching(false);
     }
-  }, [link]);
+  }, [link, apiUrl]);
 
   const handleDownload = async () => {
     try {
-      const res = await axios.post("http://localhost:8000/api/download/start", {
-        url: link, format_type: format, quality: quality
+      // 🛠️ USANDO A API DINÂMICA PARA INICIAR DOWNLOAD
+      const res = await axios.post(`${apiUrl}/api/download/start`, {
+        url: link, 
+        format_type: format, 
+        quality: quality
       });
+      
       setTaskId(res.data.task_id);
       setProgressData({ status: 'starting', percent: '0%' });
       
       if (user && previewData) {
         await addDoc(collection(db, "downloads"), {
-          userId: user.uid, title: previewData.title, artist: previewData.artist,
-          thumbnail: previewData.thumbnail, type: format, quality: quality,
-          originalLink: link, createdAt: serverTimestamp()
+          userId: user.uid, 
+          title: previewData.title, 
+          artist: previewData.artist,
+          thumbnail: previewData.thumbnail, 
+          type: format, 
+          quality: quality,
+          originalLink: link, 
+          createdAt: serverTimestamp()
         });
       }
     } catch (error) {
-      alert("Erro ao iniciar o download.");
+      console.error("Erro ao iniciar download:", error);
+      alert("Erro ao iniciar o download. Verifique se a API está rodando.");
     }
   };
 
@@ -78,17 +93,25 @@ export function Home() {
     if (taskId) {
       intervalRef.current = setInterval(async () => {
         try {
-          const res = await axios.get(`http://localhost:8000/api/download/progress/${taskId}`);
+          // 🛠️ USANDO A API DINÂMICA PARA CHECAR PROGRESSO
+          const res = await axios.get(`${apiUrl}/api/download/progress/${taskId}`);
           setProgressData(res.data);
+          
           if (res.data.status === 'done') {
             clearInterval(intervalRef.current);
-            window.location.href = `http://localhost:8000/api/download/file/${taskId}`;
+            // 🛠️ REDIRECIONANDO PARA O ARQUIVO FINAL NA API
+            window.location.href = `${apiUrl}/api/download/file/${taskId}`;
+            
             setTimeout(() => {
-              setTaskId(null); setProgressData(null); setLink(''); setPreviewData(null);
+              setTaskId(null); 
+              setProgressData(null); 
+              setLink(''); 
+              setPreviewData(null);
             }, 3000);
           } else if (res.data.status === 'error') {
             clearInterval(intervalRef.current);
-            alert("Erro no servidor."); setTaskId(null);
+            alert("Erro no servidor."); 
+            setTaskId(null);
           }
         } catch (error) {
           console.error("Erro ao checar progresso");
@@ -96,13 +119,12 @@ export function Home() {
       }, 1000);
     }
     return () => clearInterval(intervalRef.current);
-  }, [taskId]);
+  }, [taskId, apiUrl]);
 
   return (
-    // Adicionado um padding extra (pb-24) no celular para o conteúdo não ficar embaixo da barra de navegação
     <main className="flex-1 flex flex-col items-center justify-center px-4 w-full max-w-3xl mx-auto text-center pb-24 md:pb-32 pt-12 relative">
       
-      {/* Barra de Progresso - Celular embaixo, PC no topo */}
+      {/* Barra de Progresso */}
       {progressData && (
         <div className="fixed md:top-8 bottom-20 md:bottom-auto left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 z-50 animate-in slide-in-from-bottom-4 md:slide-in-from-top-4 duration-300">
           <div className="flex items-center justify-between mb-2">
@@ -138,7 +160,6 @@ export function Home() {
         Cole o link abaixo. O sistema extrai áudio ou vídeo na melhor qualidade, trazendo capa e artista automaticamente.
       </p>
 
-      {/* Input Adaptável - App-like no Celular, Pill no PC */}
       <div className="w-full relative group flex flex-col md:block">
         <div className="absolute top-0 md:inset-y-0 left-6 flex items-center h-[60px] md:h-auto pointer-events-none">
           {isSearching ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> : <LinkIcon className="w-5 h-5 text-slate-400 group-focus-within:text-blue-500 transition-colors" />}
